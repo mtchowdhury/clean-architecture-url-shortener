@@ -1,7 +1,7 @@
 # clean-architecture-url-shortener
 A demo url shortener focusing on clean architecture.
 
-## External Packages/Libaries used:
+## External Packages/Libraries used:
 
 * FastEndPoints
 * MediatR
