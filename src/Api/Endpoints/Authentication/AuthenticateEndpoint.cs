@@ -1,15 +1,22 @@
-﻿using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
+﻿using System.Security.Claims;
 using Api.Endpoints.Authentication.Requests;
+using Api.Extensions;
 using FastEndpoints.Security;
-using Microsoft.AspNetCore.Http;
-using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Options;
 
 namespace Api.Endpoints.Authentication;
 
-public class AuthenticateEndpoint :Endpoint<LoginRequest>
+public class AuthenticateEndpoint : Endpoint<LoginRequest>
 {
+    private readonly ICredentialValidator _credentialValidator;
+    private readonly AuthSettings _settings;
+
+    public AuthenticateEndpoint(ICredentialValidator credentialValidator, IOptions<AuthSettings> settings)
+    {
+        _credentialValidator = credentialValidator;
+        _settings = settings.Value;
+    }
+
     public override void Configure()
     {
         Post("/api/login");
@@ -18,42 +25,17 @@ public class AuthenticateEndpoint :Endpoint<LoginRequest>
 
     public override async Task HandleAsync(LoginRequest req, CancellationToken ct)
     {
-        // if (await authService.CredentialsAreValid(req.Username, req.Password, ct))
-        //mocking the auth// check with db users
-        if (true)
+        if (!_credentialValidator.IsValid(req.Username, req.Password))
         {
-            //var jwtToken = JwtBearer.CreateToken(
-            //    o =>
-            //    {
-            //        o.SigningKey = "A secret token signing key";
-            //        o.ExpireAt = DateTime.UtcNow.AddDays(1);
-            //        o.User.Roles.Add("Manager", "Auditor");
-            //        o.User.Claims.Add(("UserName", req.Username));
-            //        o.User["UserId"] = "001"; //indexer based claim setting
-            //    });
-            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("nRAStewNgwTdo2k5Y75qag3gseg64gh6hgfgh"));
-            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
-
-            var claims = new[]
-            {
-                new Claim(JwtRegisteredClaimNames.Sub, req.Username),
-                //new Claim(JwtRegisteredClaimNames.Email, user.Email),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-            };
-
-            var token = new JwtSecurityToken(issuer: "moq", audience: "moq",
-                claims: claims, expires: DateTime.Now.AddMinutes(int.Parse("60")),
-                signingCredentials: credentials);
-
-            var encodedToken = new JwtSecurityTokenHandler().WriteToken(token);
-            await SendAsync(
-                new
-                {
-                    req.Username,
-                    Token = encodedToken
-                });
+            await SendUnauthorizedAsync(ct);
+            return;
         }
-        else
-            ThrowError("The supplied credentials are invalid!");
+
+        var token = JWTBearer.CreateToken(
+            signingKey: _settings.Secret,
+            expireAt: DateTime.UtcNow.AddMinutes(_settings.TokenLifetimeMinutes),
+            claims: new[] { (ClaimTypes.NameIdentifier, req.Username) });
+
+        await SendAsync(new { req.Username, Token = token }, cancellation: ct);
     }
 }

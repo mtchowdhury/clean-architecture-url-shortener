@@ -24,9 +24,15 @@ public static class ConfigureServices
             );
         _ = services.AddHttpContextAccessor();
 
+        var authSettings = configuration.GetSection(AuthSettings.SectionName).Get<AuthSettings>() ?? new();
+        if (string.IsNullOrWhiteSpace(authSettings.Secret) || authSettings.Secret.Length < 32)
+            throw new InvalidOperationException("Auth:Secret must be configured and at least 32 characters long.");
+
+        _ = services.Configure<AuthSettings>(configuration.GetSection(AuthSettings.SectionName));
+        _ = services.AddSingleton<ICredentialValidator, ConfiguredCredentialValidator>();
+
         _ = services.AddHealthChecks();
-        _ = services.AddAuthentication();
-        _ = services.AddAuthorization();
+        _ = services.AddAuthenticationJWTBearer(authSettings.Secret);
 
         _ = services
             .AddAuthorization()
